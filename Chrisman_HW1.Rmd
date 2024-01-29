@@ -1,0 +1,203 @@
+---
+title: "Chrisman_HW1"
+author: "Garrett Chrisman"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r IOCT}
+
+IOCT <- read.csv("IOCT.csv")
+
+```
+
+```{r}
+summary(IOCT)
+```
+
+```{r data analysis1, echo=FALSE}
+library(ggplot2)
+ggplot(IOCT, aes(x = height, y = IOCT_Time)) + 
+    geom_point() + 
+    geom_smooth(method = "lm") + 
+    labs(title = "Height vs IOCT Time", x = "Height(inch)", y = "IOCT Time")
+```
+
+```{r data analysis2, echo = FALSE}
+
+ggplot(IOCT, aes(x = height, y = APFT_Score)) + 
+    geom_point() + 
+    geom_smooth(method = "lm")
+
+```
+
+```{r data analysis3, echo = FALSE}
+
+ggplot(IOCT, aes(x = as.factor(height), y = IOCT_Time)) + 
+    geom_boxplot()+ 
+    labs(title = "Boxplot of IOCT time grouped by Height", x = "Grouped Height", y = "IOCT Time")
+
+
+
+
+
+ggplot(IOCT, aes(x = as.factor(sex), y = IOCT_Time)) + 
+    geom_boxplot()+ 
+    labs(title = "Boxplot of IOCT time grouped by Sex", x = "Sex", y = "IOCT Time")
+
+
+```
+
+Possible out liars @ 63 and 64 height
+
+```{r data analysis4, echo = FALSE}
+
+ggplot(IOCT, aes(x = height)) +
+    geom_histogram(binwidth = 1, color = "black") +
+    labs(title = "Histogram of People by Height", x = "Height (inch)", y = "Count")
+
+```
+
+```{r data analysis6, echo = FALSE}
+
+ggplot(IOCT, aes(x = IOCT_Time)) +
+    geom_histogram(binwidth = 5, color = "black") +
+    labs(title = "Distribution of IOCT Time", x = "IOCT Time", y = "Frequency")
+
+```
+
+```{r data analysis7, echo = FALSE}
+
+library(corrplot)
+correlation = cor(IOCT[, c("height", "IOCT_Time", "pu_score", "su_score", "run_score", "APFT_Score")])
+
+correlation
+corrplot(correlation, method = "color")
+
+#how to print a cor plot: https://stackoverflow.com/questions/64433373/how-to-plot-corr-test-output#:~:text=This%20example%20may%20help%20%3A%20mcor%20%3C-%20cor,%23%20print%20correlation%20To%20print%20scatter%20plot%20%3A 
+
+```
+ata Analysis commentary breaking down each plot/most relevant plot for the write up. Note audience 
+
+
+```{r }
+summary(IOCT)
+```
+
+```{r model 1}
+
+#model1 = lm(IOCT_Time ~ height + pu_score + run_score, data = IOCT)
+model1 = lm(IOCT_Time ~ height + weight + sex, data = IOCT)
+
+summary(model1)
+
+#cooksdistance
+plot(model1, which = 4)
+
+cooks_dist = cooks.distance(model1)
+cooks_dist[c(113, 146, 202)]
+thres = 4/(384-3-1)
+thres
+#rewsiduals
+plot(model1, which = 1)
+
+#through this method of interpretation cook's distance, the data point at index 113 is a source of high leverage and has validity to be removed from the data set. 
+
+#https://stackoverflow.com/questions/6155687/cooks-distance-plot-with-r
+#https://stats.stackexchange.com/questions/22161/how-to-read-cooks-distance-plots#:~:text=Some%20texts%20tell%20you%20that%20points%20for%20which,latter%20formula%20should%20yield%20a%20threshold%20around%200.1. 
+
+```
+
+```{r remove}
+
+#IOCT = IOCT[-113, ] # only run once or else run inital CSV again
+#IOCT = IOCT[-146, ]
+```
+
+Data Analysis commentary breaking down each plot/most relevant plot for the write up. Note audience 
+
+```{r model 2}
+#summary(IOCT)
+
+model2 = model2 = lm(IOCT_Time ~ height + weight + sex + height:weight + height:sex + weight:sex, data = IOCT) #slightly lower AIC by 2 to use su-score instead of run_score, using APFT give you ~25 lower
+summary(model2)
+
+#cooksdistance
+plot(model2, which = 4)
+
+cooks_dist = cooks.distance(model2)
+cooks_dist[c(146, 202, 266)]
+thres = 4/(384-3-1)
+thres
+
+#rewsiduals
+plot(model2, which = 1)
+
+
+
+```
+
+```{r model 2.5}
+summary(IOCT)
+
+model2.5 = lm(IOCT_Time ~ height + sex + height:weight + height:sex + weight:sex, data = IOCT) #
+summary(model2)
+
+#cooksdistance
+plot(model2.5, which = 4)
+
+cooks_dist = cooks.distance(model2.5)
+cooks_dist[c(146, 202, 266)]
+thres = 4/(384-3-1)
+thres
+
+#rewsiduals
+plot(model2.5, which = 1)
+
+
+
+```
+
+```{r model 3}
+#summary(IOCT)
+
+model3 = glm(IOCT_Time ~ height * sex + APFT_Score, data = IOCT, family = poisson(link = "log")) # adding interaction term and ACFT decreaded AIC by 300 but still far above hte other LM
+summary(model3)
+
+#cooksdistance
+plot(model3, which = 4)
+
+cooks_dist = cooks.distance(model3)
+#IOCT = IOCT[-145, ] # removing outliar at 146 dropped AIC ~~ 20
+cooks_dist[c(145, 202, 266)]
+thres = 4/(384-3-1)
+thres
+
+#rewsiduals
+plot(model3, which = 1)
+
+```
+
+```{r compare}
+
+AIC(model1, model2, model3)
+
+```
+
+```{r my data}
+
+new_data = data.frame(height = 72, weight = 184 , APFT_Score = 273.0 , sex = "M")
+
+predicted_time = predict(model2, newdata = new_data)
+predicted_time
+```
