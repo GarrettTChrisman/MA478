@@ -1,0 +1,330 @@
+---
+title: "Homework 2"
+author: "Garrett Chrisman"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("readxl") # how ro teal excel finle into R http://www.sthda.com/english/wiki/reading-data-from-excel-files-xls-xlsx-into-r
+library(readxl)
+#install.packages("dplyr")
+library(dplyr)
+#install.packages("ggplot2")
+library(ggplot2)
+#install.packages("corrplot")
+library(corrplot)
+#install.packages("GGally")
+library(GGally)
+```
+
+## R Markdown
+
+```{r data exploration - summary}
+
+data = read_excel("insurance_training_data.xlsx")
+summary(data)
+head(data)
+
+num_data <- data[sapply(data, is.numeric)]
+data_flag1 = num_data[num_data$TARGET_FLAG == 1, ]
+data_flag0 = num_data[num_data$TARGET_FLAG == 0, ]
+
+nrow(data_flag1)
+nrow(data_flag0)
+
+sum_stats_1 = summary(data_flag1)
+sum_stats_0 = summary(data_flag0)
+
+sum_stats_1
+sum_stats_0
+
+#vars_I_like = c("TARGET_FLAG","TARGET_AMT","AGE", "BLUEBOOK", "CAR_TYPE", "CAR_USE", "MVR_PTS", "TIF", "TRAVTIME", "SEX", "INCOME")
+```
+
+```{r corr}
+#data2 = data[vars_I_like]
+data2 = data
+num_data <- data2[sapply(data2, is.numeric)]
+cor_matrix <- cor(num_data, use = "pairwise.complete.obs")
+#https://www.statology.org/r-correlation-with-missing-values/
+cor_matrix
+corrplot(cor_matrix, type = "upper")
+#ggpairs(num_data, )
+
+```
+
+```{r plots, plots, plots}
+ggplot(data2, aes(x = factor(TARGET_FLAG))) +
+  geom_bar(fill = "black") +
+  labs(title = "Distribution of TARGET_FLAG", x = "TARGET_FLAG", y = "Count") +
+  theme_minimal()
+
+data_flag1 = data[data$TARGET_FLAG == 1, ]
+ggplot(data_flag1, aes(x = TARGET_AMT)) +
+  geom_histogram(fill = "black", bins = 50, na.rm = TRUE) +
+  labs(title = "Distribution of TARGET_AMT", x = "TARGET_AMT", y = "Frequency") +
+  theme_minimal()
+
+ggplot(data2, aes(x = CAR_TYPE, fill = factor(TARGET_FLAG))) + 
+  geom_bar(position = "dodge") +
+  labs(fill = "Crashed", x = "Car Type", y = "Count") +
+  theme_minimal()
+
+ggplot(data2, aes(x = factor(TARGET_FLAG), y = AGE, fill = factor(TARGET_FLAG))) + 
+  geom_boxplot() +
+  labs(fill = "Crashed", x = "Crashed", y = "Age") +
+  theme_minimal()
+
+ggplot(data2, aes(x = factor(TARGET_FLAG), y = BLUEBOOK, fill = factor(TARGET_FLAG))) + 
+  geom_boxplot(trim = FALSE) +
+  labs(fill = "Crashed", x = "Crashed", y = "Value of Vehicle") +
+  theme_minimal()
+
+ggplot(data2, aes(x = CAR_USE, fill = factor(TARGET_FLAG))) + 
+  geom_bar(position = "fill") +
+  labs(fill = "Crashed", x = "Car USe", y = "Proportion") +
+  theme_minimal()
+
+ggplot(data2, aes(x = TRAVTIME, fill = factor(TARGET_FLAG), alpha = 0.5)) + 
+  geom_density() +
+  labs(fill = "Crashed", x = "Travel Time to Work", y = "Density") +
+  theme_minimal()
+
+ggplot(data2, aes(x = AGE, y = BLUEBOOK, color = factor(TARGET_FLAG))) + 
+  geom_point(alpha = 0.5) +
+  labs(color = "Crashed", x = "Age", y = "Bluebook Value") +
+  theme_minimal()
+```
+
+```{r}
+cat_vars <- c("PARENT1", "MSTATUS", "SEX", "EDUCATION", "CAR_USE", "CAR_TYPE", "RED_CAR", "REVOKED", "URBANICITY")
+for (var in cat_vars) {
+  data[[var]] <- as.factor(data[[var]])
+}
+```
+
+```{r data transformation - missing vlaues}
+
+na_count = sapply(data, function(x) sum(is.na(x)))
+na_count = na_count[na_count > 0]
+print(na_count)
+# data <- data[ , -14] #only run once as will delete future 14 col
+# for each var in na_count, I am going to show the histogram to determine id mean or median is better.
+#Skewed distribution: median for imputation.
+#Normal distribution: mean for imputation.
+
+vars_na <- names(na_count)
+for(var in vars_na) {
+  hist(data[[var]], xlab = var, col = 'blue', main = paste("Distribution of ", var))
+}
+
+hist(data$CAR_AGE, xlab = "CAR AGE", col = 'blue', main = paste("Distribution of CAR AGE"))
+
+#age with mean, YOJ with mean, income with median, home value with median, and care age with median
+data$AGE[is.na(data$AGE)] = mean(data$AGE, na.rm = TRUE)
+data$YOJ[is.na(data$YOJ)] = mean(data$YOJ, na.rm = TRUE)
+
+data$INCOME[is.na(data$INCOME)] = median(data$INCOME, na.rm = TRUE)
+data$HOME_VAL[is.na(data$HOME_VAL)] = median(data$HOME_VAL, na.rm = TRUE)
+data$CAR_AGE[is.na(data$CAR_AGE)] = median(data$CAR_AGE, na.rm = TRUE)
+ 
+#we are going to drop the JOB col due to 1.) it having the most NA's adn 2.) it will not be used in any of our future models
+#data <- data[ , -14] #only run once as will delete future 14 col
+head(data)
+
+#check NA count
+na_count_2 = sapply(data, function(x) sum(is.na(x)))
+na_count_2 = na_count_2[na_count_2 > 0]
+print(na_count_2)
+
+```
+
+
+
+```{r }
+set.seed(13) 
+test_index <- sample(1:nrow(data), 1000, replace = FALSE) 
+train_data <- data[-test_index, ] 
+test_data <- data[test_index, ] 
+
+
+```
+
+
+```{r }
+#install.packages("leaps")
+
+library(leaps)
+regfit.full <- regsubsets(TARGET_AMT ~ . - TARGET_FLAG - INDEX - BLUEBOOK , data = train_data[train_data$TARGET_FLAG == 1,], nvmax = ncol(train_data)-1)
+reg.summary <- summary(regfit.full)
+reg.summary
+
+plot(reg.summary$bic, type="l")
+which.min(reg.summary$bic)
+
+best_model_vars <- coef(regfit.full, id = 1)
+print(names(best_model_vars)[!is.na(best_model_vars)])
+#https://lifewithdata.com/2023/08/16/how-to-use-regsubsets-in-r-for-model-selection/
+# data is not linear
+
+```
+
+```{r }
+
+
+```
+
+```{r build models}
+train_AMTdata  <- train_data[train_data$TARGET_FLAG == 1,] 
+test_data_filtered = test_data[test_data$TARGET_FLAG == 1,]
+#KIDSDRIV + INCOME + MSTATUS + CAR_USE + TIF + CAR_TYPE+ MVR_PTS + CAR_AGE + URBANICITY
+train1_mlm <- lm(TARGET_AMT ~ CAR_TYPE, data = train_AMTdata)
+test1_pred <- predict(train1_mlm,test_data_filtered, type="response")
+# this model does poorly only having one variable due to the non linearity of hte vars in relation to the target amount
+summary(train1_mlm)
+
+
+```
+
+```{r}
+
+#This first model feels over complicated and can be difficult to intrepret due to muber of vars(10), instead, we are going to look at a model for var that I like driven by my own intuition 
+
+
+#starting with a much larger model, utalizing step as explain in pg 22 of faraway, we get a smaller model that hoes to preserve the prediction abilities. uses AIC. 
+lm <- step(train1_mlm,trace=FALSE)
+summary(lm)
+lm_pred <- predict(lm,test_data_filtered, type="response")
+
+plot(lm_pred,test_data_filtered$TARGET_AMT)
+plot(lm, which = 5)
+halfnorm(residuals(lm))
+plot(train_AMTdata$TARGET_AMT, rstandard(lm))
+plot(lm_pred,test_data_filtered$TARGET_AMT)
+
+#residuals are not normally distributed and thus fail assumption of linear model
+
+```
+
+```{r}
+vars_i_like = c("TARGET_FLAG","TARGET_AMT","AGE", "BLUEBOOK", "CAR_TYPE", "CAR_USE", "MVR_PTS", "TIF", "TRAVTIME", "SEX", "INCOME")
+data_mlm = train_data[vars_i_like]
+data_mlm2 =  data_mlm[data_mlm$TARGET_FLAG == 1,]
+
+data_mlm2
+test_data_filtered = test_data[test_data$TARGET_FLAG == 1,]
+
+
+train2_mlm <- lm(TARGET_AMT ~ AGE + CAR_TYPE+ TIF+ SEX+ INCOME, data = data_mlm2)
+test2_pred <- predict(train2_mlm, test_data_filtered, type = "response")
+
+train_pred <- predict(train2_mlm, data_mlm2)
+
+summary(train2_mlm)
+
+
+```
+
+```{r}
+train_pred <- predict(train1_mlm, train_AMTdata)
+mse1 <- mean((train_AMTdata$TARGET_AMT - train_pred)^2)
+mse1
+
+rsquared1 <- summary(train1_mlm)$adj.r.squared
+rsquared1
+
+f_statistic1 <- summary(train2_mlm)$fstatistic[1]
+f_statistic1
+
+plot(train1_mlm, which = 1)
+
+
+
+
+mse2 <- mean((data_mlm2$TARGET_AMT - train_pred)^2)
+mse2
+adj_r_squared2 <- summary(train2_mlm)$adj.r.squared
+adj_r_squared2
+f_statistic2 <- summary(train2_mlm)$fstatistic[1]
+f_statistic2
+
+plot(train_pred, residuals(train2_mlm), xlab = "Fitted", ylab = "Residuals")
+
+plot(train2_mlm, which = 5)
+
+halfnorm(residuals(train2_mlm))
+
+plot(test2_pred,test_data_filtered$TARGET_AMT)
+
+```
+
+
+```{R}
+full_model = glm(TARGET_FLAG ~ . - TARGET_AMT - INDEX - BLUEBOOK, family = binomial(), data = train_data)
+summary(full_model)
+
+step_model <- step(full_model, trace = 0)
+selected_vars_stepwise <- names(coef(step_model))
+selected_vars_stepwise
+summary(step_model)
+
+#manually selected var
+#variables we think might be important
+manual_vars <- c("KIDSDRIV", "PARENT1", "MSTATUS","SEX", "EDUCATION", "CAR_USE", "CAR_TYPE", "REVOKED") 
+manual_model <- glm(TARGET_FLAG ~ ., family = binomial(), data = train_data[, c("TARGET_FLAG", manual_vars)])
+summary(manual_model)
+
+#anova(lmod,lmodr, test="Chi")
+#1 - pchisq(0.96141,1,lower=FALSE)
+
+#pchisq(deviance(lmod),df.residual(lmod),lower=FALSE)
+# does not fit well
+
+
+```
+
+```{r}
+predict_full <- predict(full_model, newdata = test_data, type = "response")
+predict_step <- predict(step_model, newdata = test_data, type = "response")
+predict_manual <- predict(manual_model, newdata = test_data, type = "response")
+
+predict_full <- ifelse(predict_full > .5, 1 ,0)
+predict_step <- ifelse(predict_step > .5, 1 ,0)
+predict_manual <- ifelse(predict_manual > .5, 1 ,0)
+
+```
+
+```{r}
+
+anova(manual_model, step_model, full_model, test="Chisq")
+
+
+aic_values <- c(full = AIC(full_model), stepwise = AIC(step_model), manual = AIC(manual_model))
+print(aic_values)
+
+library(pROC)
+full_roc <- roc(test_data$TARGET_FLAG, predict(full_model, newdata = test_data, type = "response"))
+stepwise_roc <- roc(test_data$TARGET_FLAG, predict(step_model, newdata = test_data, type = "response"))
+manual_roc <- roc(test_data$TARGET_FLAG, predict(manual_model, newdata = test_data, type = "response"))
+
+auc_values <- c(full = auc(full_roc), stepwise = auc(stepwise_roc), manual = auc(manual_roc))
+print(auc_values)
+
+
+```
+
+
+```{r}
+
+full_confusion <- confusionMatrix(as.factor(test_data$TARGET_FLAG), as.factor(predict_full))
+stepwise_confusion <- confusionMatrix(as.factor(test_data$TARGET_FLAG), as.factor(predict_step))
+manual_confusion <- confusionMatrix(as.factor(test_data$TARGET_FLAG), as.factor(predict_manual))
+
+full_confusion
+stepwise_confusion
+manual_confusion
+
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
