@@ -1,0 +1,433 @@
+---
+title: "Homework 3 Chrisman"
+author: "Garrett Chrisman"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("readxl") # how ro teal excel finle into R http://www.sthda.com/english/wiki/reading-data-from-excel-files-xls-xlsx-into-r
+library(readxl)
+#install.packages("dplyr")
+library(dplyr)
+#install.packages("ggplot2")
+library(ggplot2)
+#install.packages("corrplot")
+library(corrplot)
+#install.packages("GGally")
+library(GGally)
+library(faraway)
+library(tidyverse)
+```
+
+```{r data exploration - summary}
+
+wine_eval = read.csv("wine-evaluation-data.csv")
+wine_train = read.csv("wine-training-data.csv")
+summary(wine_train)
+head(wine_train)
+
+nrow(wine_eval)
+nrow(wine_train)
+
+
+
+```
+
+
+```{r - corr}
+
+data2 = wine_train
+num_data <- data2[sapply(data2, is.numeric)]
+cor_matrix <- cor(num_data, use = "pairwise.complete.obs")
+#https://www.statology.org/r-correlation-with-missing-values/
+cor_matrix
+corrplot(cor_matrix, type = "upper")
+#ggpairs(num_data, )
+
+```
+
+```{r - NA's}
+
+valid_stars <- wine_train$STARS[!is.na(wine_train$STARS)]
+#valid_stars
+samples_for_na <- sample(valid_stars, sum(is.na(wine_train$STARS)), replace = TRUE)
+#samples_for_na
+wine_train$STARS[is.na(wine_train$STARS)] <- samples_for_na
+
+summary(wine_train)
+
+wine_train$STARS <- factor(wine_train$STARS)
+wine_train$LabelAppeal <- factor(wine_train$LabelAppeal)
+
+summary(wine_train)
+```
+
+```{r - NA's}
+
+for (col in names(wine_train)) {
+  if (is.numeric(wine_train[[col]])) {
+    col_mean <- mean(wine_train[[col]], na.rm = TRUE)
+    wine_train[[col]][is.na(wine_train[[col]])] <- col_mean
+  }
+}
+#https://www.r-bloggers.com/2023/01/imputation-in-r-top-3-ways-for-imputing-missing-data/
+summary(wine_train)
+```
+
+
+```{r - graphs}
+names(wine_train)
+
+ggplot(wine_train, aes(x = factor(TARGET))) +
+  geom_bar(fill = "black") +
+  labs(title = "Distribution of TARGET", x = "TARGET", y = "Count") +
+  theme_minimal()
+
+ggplot(wine_train, aes(x = factor(TARGET), y = STARS)) +
+  geom_jitter() +
+  labs(title = "Boxplot of STARS by TARGET", x = "TARGET", y = "STARS") +
+  theme_minimal()
+
+ggplot(wine_train, aes(x = factor(TARGET), y = LabelAppeal)) +
+  geom_jitter() +
+  labs(title = "Boxplot of LabelAppeal by TARGET Categories", x = "TARGET", y = "LabelAppeal") +
+  theme_minimal()
+
+ggplot(wine_train, aes(y = Alcohol, x = factor(TARGET))) +
+  geom_boxplot() +
+  labs(title = "Box and Whisker Plot of Alcohol Content by TARGET", x = "TARGET", y = "Alcohol Content") +
+  theme_minimal()
+
+ggplot(wine_train, aes(x = pH, fill = factor(TARGET))) +
+  geom_density(alpha = 0.2) +
+  labs(title = "Density Plot of pH by STARS Rating",
+       x = "pH Level",
+       y = "Density") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Paired")
+
+
+ggplot(wine_train, aes(x = factor(STARS), y = pH, fill = factor(STARS))) +
+  geom_violin() +
+  labs(title = "Violin Plot of Density by STARS Rating",
+       x = "STARS Rating",
+       y = "Density") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Paired")
+
+ggplot(wine_train, aes(x = STARS, fill = LabelAppeal)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Label Appeal by STARS Rating",
+       x = "STARS Rating",
+       y = "Count") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Paired")
+
+```
+
+
+
+```{r - graphs}
+
+pos_model <- glm(TARGET ~ . - INDEX, data=wine_train,
+                family=poisson(link=log))
+
+summary(pos_model)
+
+1-pchisq(deviance(pos_model),df.residual(pos_model))
+deviance(pos_model) / df.residual(pos_model)
+sum(residuals(pos_model, type="pearson")^2) / df.residual(pos_model)
+
+pos_model2 <- glm(TARGET ~  STARS + LabelAppeal + Chlorides + Alcohol + Density, data=wine_train,
+                family=poisson(link=log))
+
+# taken 5 ;largest estiamtes form saturated model. to make a smaller model
+
+summary(pos_model2)
+
+1-pchisq(deviance(pos_model2),df.residual(pos_model2))
+deviance(pos_model2) / df.residual(pos_model2)
+# 0 - does not fit model and fails goodness of fit test. 1.53 is a good dp. 
+# alcholo and vol acid have a sig effect but it is tiny compaared to label and stars. 
+
+sum(residuals(pos_model2, type="pearson")^2) / df.residual(pos_model2)
+
+halfnorm(residuals(pos_model))
+halfnorm(residuals(pos_model2))
+
+AIC(pos_model, pos_model2)
+
+anova(pos_model, pos_model2, test = "Chisq")
+# prefers more complex model but duh its every var
+
+```
+
+```{r}
+counts<-seq(0,8)
+counts
+obs<-12795
+
+predicted_counts <- predict(pos_model2, type = "response")
+predicted_rounded_counts <- round(predicted_counts)
+predicted_counts_table <- table(predicted_rounded_counts)
+
+pos_est_df <- data.frame(TARGET = names(predicted_counts_table), Count = predicted_counts_table, Type = 'Poisson Est')
+pos_est_df
+
+actual <- table(wine_train$TARGET)
+actual_df <- data.frame(TARGET = names(actual), Count = as.numeric(actual), Type = 'Actual')
+
+pois_est<-obs*dpois(seq(0,8),exp(.8))
+pois_est
+
+ggplot(pos_est_df, aes(x = TARGET, y = Count.Freq, fill = Type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Comparison of Actual and Estimated Counts",
+       x = "TARGET Category",
+       y = "Count") +
+  theme_minimal()
+
+ggplot(actual_df, aes(x = TARGET, y = Count, fill = Type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Comparison of Actual and Estimated Counts",
+       x = "TARGET Category",
+       y = "Count") +
+  theme_minimal()
+
+```
+
+
+```{r}
+
+library(MASS)
+nb_model <-glm.nb(TARGET ~  STARS + LabelAppeal + Chlorides + Alcohol + Density ,data=wine_train)
+
+summary(nb_model)
+AIC(nb_model)
+
+#hm save values as pos_model2. talk about it in report, reference overdispersion. next model change input vars to get a different model. 
+#Vars selected based off largest coeff and stat sig
+nb_model2 <-glm.nb(TARGET ~  STARS + LabelAppeal + Density, data = wine_train)
+
+summary(nb_model2)
+
+nb_model3 <-glm.nb(TARGET ~ . - INDEX,data=wine_train)
+
+summary(nb_model3)
+AIC(nb_model2)
+
+logLik(nb_model)
+logLik(nb_model2)
+logLik(nb_model3)
+
+AIC(nb_model, nb_model2, nb_model3)
+
+1-pchisq(deviance(nb_model),df.residual(nb_model))
+deviance(nb_model) / df.residual(nb_model)
+sum(residuals(nb_model, type="pearson")^2) / df.residual(nb_model)
+
+1-pchisq(deviance(nb_model2),df.residual(nb_model2))
+deviance(nb_model2) / df.residual(nb_model2)
+sum(residuals(nb_model2, type="pearson")^2) / df.residual(nb_model2)
+
+1-pchisq(deviance(nb_model3),df.residual(nb_model3))
+deviance(nb_model3) / df.residual(nb_model3)
+sum(residuals(nb_model3, type="pearson")^2) / df.residual(nb_model3)
+
+
+nb_est <- obs*dpois(seq(0,8),exp(1.027)) # 1.027 is model intercept
+nb_est
+nb_est_df <- data.frame(TARGET = 0:8, Count = nb_est, Type = 'NB Est')
+
+
+ggplot(nb_est_df, aes(x = factor(TARGET), y = Count, fill = Type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Comparison of Actual and Estimated Counts",
+       x = "TARGET Category",
+       y = "Count") +
+  theme_minimal()
+
+ggplot(actual_df, aes(x = TARGET, y = Count, fill = Type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Comparison of Actual and Estimated Counts",
+       x = "TARGET Category",
+       y = "Count") +
+  theme_minimal()
+
+anova(nb_model, nb_model2, test = "Chisq")
+#model 1 is better with more paramaters per AIC, Loglikelyhood as ANOVA
+
+```
+
+
+```{r}
+library(pscl)
+zip_model <- zeroinfl(TARGET~1,data=wine_train,family="poisson")
+summary(zip_model)
+
+
+pred_zip <- predict(zip_model, newdata=wine_train, type="response")
+round_zip <- round(pred_zip)
+table_round_zip <- table(round_zip)
+table_round_zip
+
+baseline_count <- exp(1.325142)
+baseline_count
+exp(-1.41797)/(1+exp(-1.41797))
+Pr0<-0.19+(1-0.19)*dpois(0,baseline_count)
+Pr0
+
+zip_model2 <- zeroinfl(TARGET~  (LabelAppeal) + STARS + Density , data=wine_train ,family="poisson")
+summary(zip_model2)
+
+pred_zip2 <- predict(zip_model2, newdata=wine_train, type="count")
+round_zip2 <- round(pred_zip2)
+table_round_zip2 <- table(round_zip2)
+table_round_zip2
+
+
+prob_excess_zero <- exp(-16.63062) / (1 + exp(-16.63062))
+prob_excess_zero
+lambda <- exp(0.572898)
+lambda
+Pr0_poisson <- dpois(0, lambda)
+Pr0 <- prob_excess_zero + (1 - prob_excess_zero) * Pr0_poisson
+Pr0
+
+zip_est <- c(obs*Pr0, obs*dpois(1:8, exp(1.325142))*(1-0.19))
+zip_est_df <- data.frame(TARGET = names(actual), Count = zip_est, Type = 'ZIP Est')
+zip_est_df
+ggplot(zip_est_df, aes(x = factor(TARGET), y = Count, fill = Type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Comparison of Actual and Estimated Counts",
+       x = "TARGET Category",
+       y = "Count") +
+  theme_minimal()
+
+
+zip_est2 <- c(obs*Pr0, obs*dpois(1:8,lambda)*(1-prob_excess_zero))
+zip_est_df2 <- data.frame(TARGET = names(actual), Count = zip_est2, Type = 'ZIP Est')
+
+zip_est_df2
+ggplot(zip_est_df2, aes(x = factor(TARGET), y = Count, fill = Type)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Comparison of Actual and Estimated Counts",
+       x = "TARGET Category",
+       y = "Count") +
+  theme_minimal()
+```
+
+great now were looking at a second NB model. not the changes in the model where we further limited the coefficients but still received outputs that showed a poor model fit,. references the zero count and why they effects the NB model format. 
+
+code and output: 
+```{r}
+nrow(wine_train)
+
+counts<-seq(0,8)
+counts
+obs<-12795
+
+pois_est<-obs*dpois(seq(0,8),exp(.8))
+pois_est2<-obs*dpois(seq(0,8),exp(.8))
+
+nb_est <- obs*dpois(seq(0,8),exp(0.282307))
+
+zip_est <- c(obs*Pr0, obs*dpois(1:8, exp(1.325142))*(1-0.19))
+zip_est2 <- c(obs*Pr0, obs*dpois(1:8, exp(0.572898))*(1-.2))
+
+actual <- table(wine_train$TARGET)
+
+rbind(pois_est,nb_est,zip_est,actual)
+rbind(pois_est2,nb_est,zip_est2,actual)
+
+actual_df <- data.frame(TARGET = names(actual), Count = as.numeric(actual), Type = 'Actual')
+pois_est_df <- data.frame(TARGET = names(actual), Count = pois_est, Type = 'Pois')
+
+nb_est_df <- data.frame(TARGET = names(actual), Count = nb_est, Type = 'NB Est')
+
+zip_est_df <- data.frame(TARGET = names(actual), Count = zip_est, Type = 'ZIP Est')
+zip_est_df <- data.frame(TARGET = names(actual), Count = zip_est2, Type = 'ZIP Est')
+
+zip_est
+
+ch_sq <- sum((zip_est-actual)^2/zip_est)
+1-pchisq(ch_sq,8)
+```
+
+```{r}
+
+ggplot(combined_df, aes(x = as.factor(TARGET), y = Count, color = Type)) +
+  geom_line( size = 3) +
+  geom_point(size = 2) +
+  labs(title = "Comparison of Actual and Estimated Counts",
+       x = "TARGET Category",
+       y = "Count") +
+  scale_color_brewer(palette)
+
+```
+
+```{r}
+
+wine_eval$STARS <- factor(wine_eval$STARS)
+wine_eval$LabelAppeal <- factor(wine_eval$LabelAppeal)
+
+summary(wine_eval)
+
+valid_stars_eval <- wine_eval$STARS[!is.na(wine_eval$STARS)]
+#valid_stars
+samples_for_na_eval <- sample(valid_stars_eval, sum(is.na(wine_eval$STARS)), replace = TRUE)
+#samples_for_na
+wine_eval$STARS[is.na(wine_eval$STARS)] <- samples_for_na_eval
+
+summary(wine_eval)
+
+wine_eval$STARS <- factor(wine_eval$STARS)
+wine_eval$LabelAppeal <- factor(wine_eval$LabelAppeal)
+
+summary(wine_eval)
+
+for (col in names(wine_eval)) {
+  if (is.numeric(wine_eval[[col]])) {
+    col_mean <- mean(wine_eval[[col]], na.rm = TRUE)
+    wine_eval[[col]][is.na(wine_eval[[col]])] <- col_mean
+  }
+}
+#https://www.r-bloggers.com/2023/01/imputation-in-r-top-3-ways-for-imputing-missing-data/
+summary(wine_eval)
+```
+
+```{r}
+
+zip_prob_eval <- predict(zip_model2, newdata = wine_eval, type = "count")
+summary(zip_prob_eval)
+round_eval <- round(zip_prob_eval)
+adjusted_round_eval <- ifelse(zip_prob_eval < 1, 0, round(zip_prob_eval))
+
+table_round_eval <- table(round_eval)
+table_adjusted_round_eval <- table(adjusted_round_eval)
+
+table_round_eval
+table_adjusted_round_eval
+
+round_eval
+adjusted_round_eval
+
+barplot(table_adjusted_round_eval, 
+        main = "Evaluation Round Counts", 
+        xlab = "TTARGET", 
+        ylab = "Count",
+        col = "black", 
+        names.arg = c("0", "2", "3", "4", "5", "6","7"))
+
+zip_prob_eval_2 <- predict(zip_model2, newdata = wine_eval, type = "response")
+round_eval_2 <- round(zip_prob_eval_2)
+table_round_eval_2 <- table(round_eval_2)
+table_round_eval_2
+
+nrow(wine_eval)
+
+```
+
